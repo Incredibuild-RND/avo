@@ -1,0 +1,97 @@
+name: ib-threeway
+on:
+  workflow_dispatch: {}
+env:
+  RAILS_ENV: test
+  PGHOST: localhost
+  PGUSER: postgres
+  PGPORT: 5432
+  POSTGRES_HOST: localhost
+  POSTGRES_USERNAME: postgres
+  POSTGRES_PORT: 5432
+  BUNDLE_PATH_RELATIVE_TO_CWD: true
+  AVO_LICENSE_KEY: license_123
+  COVERAGE: true
+  RAILS_VERSION: '8.0'
+  BUNDLE_GEMFILE: ${{ github.workspace }}/gemfiles/rails_8.0_ruby_3.4.gemfile
+jobs:
+  github_baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build assets
+        env:
+          RAILS_ENV: production
+          NODE_ENV: production
+        run: |
+          (cd spec/dummy && yarn)
+          yarn
+          yarn build
+          yarn build:custom-js
+          echo "BENCH_STEP_DONE assets"
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          bundler: default
+          ruby-version: '3.4'
+      - run: echo "BENCH_STEP_DONE setup-ruby"
+      - name: Prepare database
+        run: |
+          bundle exec rake db:create db:migrate
+          bundle exec rake parallel:create parallel:load_schema
+          echo "BENCH_STEP_DONE db"
+      - name: Run tests
+        run: |
+          bundle exec parallel_rspec spec/features spec/requests
+          echo "BENCH_STEP_DONE tests"
+  incredibuild:
+    runs-on: incredibuild-runner
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build assets
+        env:
+          RAILS_ENV: production
+          NODE_ENV: production
+        run: |
+          (cd spec/dummy && yarn)
+          yarn
+          yarn build
+          yarn build:custom-js
+          echo "BENCH_STEP_DONE assets"
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          bundler: default
+          ruby-version: '3.4'
+      - run: echo "BENCH_STEP_DONE setup-ruby"
+      - name: Prepare database
+        run: |
+          bundle exec rake db:create db:migrate
+          bundle exec rake parallel:create parallel:load_schema
+          echo "BENCH_STEP_DONE db"
+      - name: Run tests
+        run: |
+          bundle exec parallel_rspec spec/features spec/requests
+          echo "BENCH_STEP_DONE tests"
