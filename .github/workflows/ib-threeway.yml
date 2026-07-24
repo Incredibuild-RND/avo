@@ -62,19 +62,10 @@ jobs:
       - name: Start postgres (docker run — IB services workaround)
         run: |
           docker rm -f pg 2>/dev/null || true
-          CID=""
-          for c in "$(basename "$(cat /proc/1/cpuset 2>/dev/null)" 2>/dev/null)" \
-                   "$(grep -oE '[0-9a-f]{64}' /proc/self/cgroup 2>/dev/null | head -1)" \
-                   "$(grep -oE '[0-9a-f]{64}' /proc/self/mountinfo 2>/dev/null | head -1)" \
-                   "$(cat /etc/hostname)"; do
-            if [ -n "$c" ] && docker inspect "$c" >/dev/null 2>&1; then CID="$c"; break; fi
-          done
-          echo "resolved job container: ${CID:-none}"
-          if [ -n "$CID" ]; then
-            docker run -d --name pg -e POSTGRES_HOST_AUTH_METHOD=trust --network container:$CID postgres:16
-          else
-            docker run -d --name pg -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 postgres:16
-          fi
+          docker run -d --name pg -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 postgres:16
+          GW=$(ip route 2>/dev/null | awk '/default/ {print $3; exit}'); : "${GW:=172.17.0.1}"
+          echo "PGIP=$GW" >> "$GITHUB_ENV"
+          echo "postgres reachable via host gateway: $GW"
           for i in $(seq 1 30); do docker exec pg pg_isready -U postgres && break; sleep 2; done
           echo "BENCH_STEP_DONE pg-up"
       - uses: actions/checkout@v4
@@ -98,11 +89,17 @@ jobs:
           ruby-version: '3.4'
       - run: echo "BENCH_STEP_DONE setup-ruby"
       - name: Prepare database
+        env:
+          PGHOST: ${{ env.PGIP }}
+          POSTGRES_HOST: ${{ env.PGIP }}
         run: |
           bundle exec rake db:create db:migrate
           bundle exec rake parallel:create parallel:load_schema
           echo "BENCH_STEP_DONE db"
       - name: Run tests
+        env:
+          PGHOST: ${{ env.PGIP }}
+          POSTGRES_HOST: ${{ env.PGIP }}
         run: |
           bundle exec parallel_rspec spec/features spec/requests
           echo "BENCH_STEP_DONE tests"
