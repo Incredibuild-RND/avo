@@ -61,7 +61,9 @@ jobs:
     steps:
       - name: Start postgres (docker run — IB services workaround)
         run: |
-          docker run -d --name pg -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 postgres:16
+          CID=$(cat /etc/hostname)
+          docker run -d --name pg -e POSTGRES_HOST_AUTH_METHOD=trust --network container:$CID postgres:16 \
+            || docker run -d --name pg -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 postgres:16
           for i in $(seq 1 30); do docker exec pg pg_isready -U postgres && break; sleep 2; done
           echo "BENCH_STEP_DONE pg-up"
       - uses: actions/checkout@v4
