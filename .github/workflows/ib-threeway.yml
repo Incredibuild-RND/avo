@@ -58,14 +58,12 @@ jobs:
   incredibuild:
     runs-on: incredibuild-runner
     timeout-minutes: 45
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_HOST_AUTH_METHOD: trust
-        ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
+      - name: Start postgres (docker run — IB services workaround)
+        run: |
+          docker run -d --name pg -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 postgres:16
+          for i in $(seq 1 30); do docker exec pg pg_isready -U postgres && break; sleep 2; done
+          echo "BENCH_STEP_DONE pg-up"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
